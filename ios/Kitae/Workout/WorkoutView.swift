@@ -16,6 +16,7 @@ struct WorkoutView: View {
     @State private var confirmsDiscard = false
     /// The workout's plan, being edited over the workout.
     @State private var editing: PlanEditor?
+    @State private var addsExercise = false
 
     var body: some View {
         NavigationStack {
@@ -24,6 +25,10 @@ struct WorkoutView: View {
                     ForEach(workout.exercises) { exercise in
                         exerciseSection(exercise)
                     }
+                    if workout.exercises.isEmpty {
+                        emptyHint
+                    }
+                    addExerciseButton
                 }
                 .padding(.horizontal, 16)
                 .padding(.top, 8)
@@ -60,6 +65,12 @@ struct WorkoutView: View {
         .sheet(item: $noteFor) { exercise in
             ExerciseNoteSheet(exercise: exercise, note: model.exerciseNotes[exercise.id])
                 .environment(model)
+        }
+        .sheet(isPresented: $addsExercise) {
+            ExercisePicker(dayName: "this workout", added: Set(workout.exercises.map(\.id))) { exercise in
+                workout.addExercise(exercise.id)
+            }
+            .environment(model)
         }
         .sensoryFeedback(.success, trigger: workout.doneCount) { old, new in new > old }
         .sensoryFeedback(.warning, trigger: workout.restsFinished)
@@ -151,6 +162,40 @@ struct WorkoutView: View {
                 )
             }
         }
+    }
+
+    /// What an empty workout shows until it has an exercise.
+    private var emptyHint: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Caption(".empty workout")
+            Text("Add exercises as you go. Each starts with a set like the last time you did it.")
+                .font(.subheadline)
+                .foregroundStyle(.inkSoft)
+        }
+        .padding(.horizontal, 8)
+        .padding(.top, 16)
+    }
+
+    /// Adds an exercise to this workout. If the workout has a day, Finish asks whether its sets
+    /// join the day for next time.
+    private var addExerciseButton: some View {
+        Button {
+            focus = nil
+            addsExercise = true
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: "plus")
+                    .fontWeight(.semibold)
+                Text("Add exercise")
+            }
+            .font(.body.weight(.semibold))
+            .foregroundStyle(.olive)
+            .frame(maxWidth: .infinity, minHeight: 54)
+            .background(.card, in: .capsule)
+            .contentShape(.capsule)
+        }
+        .buttonStyle(.plain)
+        .padding(.top, 8)
     }
 
     // MARK: Bottom bar

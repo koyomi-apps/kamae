@@ -63,7 +63,8 @@ sealed interface FinishQuestion {
 /**
  * Asks [question] about the workout of [dayName]. [onQuestion] gets the follow-up, or null when
  * the questions are over; [onFinish] ends the workout. With [nextDayName], another day starts
- * afterwards, and [onContinue] goes back to the workout instead.
+ * afterwards, and [onContinue] goes back to the workout instead. An empty workout has no day
+ * ([hasDay] false), so no plan to take sets out of.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -75,6 +76,7 @@ fun FinishQuestionDialog(
     onFinish: (FinishMode, Boolean) -> Unit,
     nextDayName: String? = null,
     onContinue: (() -> Unit)? = null,
+    hasDay: Boolean = true,
 ) {
     val colors = kitaeColors
     val title = when {
@@ -86,7 +88,11 @@ fun FinishQuestionDialog(
         if (nextDayName != null && question.isFirst) add(stringResource(R.string.not_finished_start_other, dayName, nextDayName))
         when (question) {
             FinishQuestion.NothingDone -> add(stringResource(R.string.nothing_done))
-            is FinishQuestion.Unfinished -> add(pluralStringResource(R.plurals.sets_not_done, question.count, question.count, dayName))
+            is FinishQuestion.Unfinished -> if (hasDay) {
+                add(pluralStringResource(R.plurals.sets_not_done, question.count, question.count, dayName))
+            } else {
+                add(pluralStringResource(R.plurals.sets_not_done_no_day, question.count, question.count))
+            }
             is FinishQuestion.AddedSets -> add(pluralStringResource(R.plurals.sets_added, question.count, question.count, dayName))
             FinishQuestion.Confirm -> Unit
         }
@@ -121,7 +127,11 @@ fun FinishQuestionDialog(
                         }
                         is FinishQuestion.Unfinished -> {
                             Choice(stringResource(R.string.keep_as_skipped)) { askAboutAddedSets(FinishMode.KeepSkipped) }
-                            Choice(stringResource(R.string.remove_from_plan)) { askAboutAddedSets(FinishMode.RemoveFromPlan) }
+                            if (hasDay) {
+                                Choice(stringResource(R.string.remove_from_plan)) { askAboutAddedSets(FinishMode.RemoveFromPlan) }
+                            } else {
+                                Choice(stringResource(R.string.remove_from_workout)) { askAboutAddedSets(FinishMode.Discard) }
+                            }
                         }
                         is FinishQuestion.AddedSets -> {
                             Choice(stringResource(R.string.add_to_day, dayName)) { finishing(question.mode, true) }

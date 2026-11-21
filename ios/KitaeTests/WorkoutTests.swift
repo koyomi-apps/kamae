@@ -305,6 +305,52 @@ struct AppModelTests {
         #expect(model.selectedDay?.name == "Pull A")
     }
 
+    @Test func anEmptyWorkoutNeedsNoPlan() throws {
+        let fresh = AppModel.testing(try KitaeDatabase.temporary())
+        #expect(fresh.currentPlan == nil)
+        fresh.startEmptyWorkout()
+        let workout = try #require(fresh.workout)
+        #expect(fresh.isWorkoutPresented)
+        #expect(workout.dayID == nil)
+        #expect(workout.planID == nil)
+        #expect(workout.dayName == "Workout")
+        #expect(workout.exercises.isEmpty)
+
+        let exercise = try #require(try fresh.database.read { db in try Exercises.all(db) }.first)
+        workout.addExercise(exercise.id)
+        workout.addExercise(exercise.id)
+        #expect(workout.exercises.map(\.id) == [exercise.id])
+        #expect(workout.setCount == 2)
+        workout.toggleDone(try #require(workout.exercises.first?.sets.first?.id))
+        // With no day, there's nothing to add the new sets to, so Finish only asks about the other set.
+        #expect(workout.addedDoneCount == 0)
+        #expect(FinishQuestion.first(for: workout, startingAnotherDay: false) == .unfinished(1))
+
+        fresh.finishWorkout(.discard, addNewSets: false)
+        #expect(fresh.workout == nil)
+        #expect(fresh.hasDoneSets)
+        #expect(fresh.currentPlan == nil)
+    }
+
+    @Test func anEmptyWorkoutLeavesThePlanAsItIs() throws {
+        let day = try #require(model.selectedDay)
+        model.startEmptyWorkout()
+        let workout = try #require(model.workout)
+        // Starting another empty workout, or a day, while it's going starts nothing new.
+        model.startEmptyWorkout()
+        model.startWorkout(day)
+        #expect(model.workout === workout)
+
+        let exercise = try #require(day.exercises.first?.exercise)
+        workout.addExercise(exercise.id)
+        workout.toggleDone(try #require(workout.exercises.first?.sets.first?.id))
+        model.finishWorkout(.keepSkipped, addNewSets: true)
+        #expect(model.workout == nil)
+        #expect(model.hasDoneSets)
+        #expect(model.selectedDay?.name == "Push A")
+        #expect(model.selectedDay?.setCount == day.setCount)
+    }
+
     @Test func aWorkoutInProgressComesBackAfterARestart() throws {
         let day = try #require(model.selectedDay)
         model.startWorkout(day)

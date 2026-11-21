@@ -35,6 +35,9 @@ sealed interface Route {
 
     /** Picks an exercise to add to one of a plan's days. */
     data class Picker(val planId: Long, val dayId: Long) : Route
+
+    /** Picks an exercise to add to the workout in progress. */
+    data object WorkoutPicker : Route
 }
 
 /** How a page moves: it opens pages on its own stack, and goes back. */
@@ -116,6 +119,7 @@ private fun Route.encoded(): String = when (this) {
     is Route.ExercisePage -> "exercise:$id"
     is Route.PlanEditor -> "plan:$planId:${dayId ?: ""}"
     is Route.Picker -> "picker:$planId:$dayId"
+    Route.WorkoutPicker -> "workout-picker"
 }
 
 private fun decodeRoute(text: String): Route? {
@@ -123,6 +127,7 @@ private fun decodeRoute(text: String): Route? {
     return when (parts.firstOrNull()) {
         "home" -> parts.getOrNull(1)?.let { name -> Tab.entries.firstOrNull { it.name == name } }?.let(Route::Home)
         "workout" -> Route.Workout
+        "workout-picker" -> Route.WorkoutPicker
         "settings" -> Route.Settings
         "body" -> Route.Body
         "past" -> parts.getOrNull(1)?.toLongOrNull()?.let(Route::PastWorkout)

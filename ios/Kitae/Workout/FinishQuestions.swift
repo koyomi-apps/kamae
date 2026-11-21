@@ -75,6 +75,8 @@ private struct FinishQuestions: ViewModifier {
     }
 
     private var dayName: String { workout?.dayName ?? "this day" }
+    /// An empty workout has no day, so no plan to take sets out of or add them to.
+    private var hasDay: Bool { workout?.dayID != nil }
 
     private var title: String {
         if nextDayName != nil { return "Workout in progress" }
@@ -90,6 +92,10 @@ private struct FinishQuestions: ViewModifier {
         switch question {
         case .nothingDone:
             parts.append("Nothing was done in this workout. Keep it as skipped, or discard it? Your plan stays the same either way.")
+        case .unfinished(1) where !hasDay:
+            parts.append("1 set isn't done. Keep it as skipped, or remove it from this workout?")
+        case .unfinished(let count) where !hasDay:
+            parts.append("\(count) sets aren't done. Keep them as skipped, or remove them from this workout?")
         case .unfinished(1):
             parts.append("1 set isn't done. Skipping it keeps \(dayName) as it is. Removing it also takes it out of the plan.")
         case .unfinished(let count):
@@ -110,6 +116,9 @@ private struct FinishQuestions: ViewModifier {
         case .nothingDone:
             Button("Keep as skipped") { onFinish(.keepSkipped, false) }
             Button("Discard workout", role: .destructive) { onFinish(.discard, false) }
+        case .unfinished where !hasDay:
+            Button("Keep as skipped") { askAboutAddedSets(after: .keepSkipped) }
+            Button("Remove from workout", role: .destructive) { askAboutAddedSets(after: .discard) }
         case .unfinished:
             Button("Keep as skipped") { askAboutAddedSets(after: .keepSkipped) }
             Button("Remove from plan", role: .destructive) { askAboutAddedSets(after: .removeFromPlan) }

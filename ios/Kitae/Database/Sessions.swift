@@ -38,6 +38,12 @@ nonisolated enum Sessions {
         try db.core.startWorkout(dayId: dayID, today: Int64(today), now: now)
     }
 
+    /// Starts an empty workout, without a day or plan, for exercises added as it goes. One that
+    /// was started today without a day and not finished carries on instead.
+    static func startEmpty(_ db: Database, today: Int, now: Int64) throws -> Int64 {
+        try db.core.startEmptyWorkout(today: Int64(today), now: now)
+    }
+
     // MARK: Reading
 
     /// The newest workout that isn't finished, if it was started today or yesterday, so a

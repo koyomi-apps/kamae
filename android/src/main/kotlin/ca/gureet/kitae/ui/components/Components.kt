@@ -141,7 +141,7 @@ fun Hairline(modifier: Modifier = Modifier, start: Dp = 18.dp) {
     )
 }
 
-/** A centred icon, title, line and button, for screens with nothing to show yet. */
+/** A centred icon, title, line and button or two, for screens with nothing to show yet. */
 @Composable
 fun EmptyState(
     @DrawableRes icon: Int,
@@ -150,6 +150,8 @@ fun EmptyState(
     modifier: Modifier = Modifier,
     action: String? = null,
     onAction: () -> Unit = {},
+    otherAction: String? = null,
+    onOtherAction: () -> Unit = {},
 ) {
     val colors = kitaeColors
     Column(
@@ -164,6 +166,9 @@ fun EmptyState(
         if (action != null) {
             Spacer(Modifier.height(12.dp))
             TextButton(onClick = onAction) { Text(action, fontSize = 16.sp, fontWeight = FontWeight.Medium) }
+        }
+        if (otherAction != null) {
+            TextButton(onClick = onOtherAction) { Text(otherAction, fontSize = 16.sp, fontWeight = FontWeight.Medium) }
         }
     }
 }

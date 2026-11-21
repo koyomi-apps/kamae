@@ -103,6 +103,62 @@ class WorkoutsTest : DatabaseFileTest() {
     }
 
     @Test
+    fun anEmptyWorkoutHasNoDayAndCarriesOn() = runBlocking {
+        val id = workouts.startEmpty(TODAY, NOW)
+        val started = assertNotNull(workouts.workout(id))
+        assertNull(started.workout.planId)
+        assertNull(started.workout.dayId)
+        assertNull(started.dayName)
+        assertFalse(started.workout.isFinished)
+        assertEquals(NOW, started.workout.startedAt)
+        assertEquals(emptyList(), workouts.exercises(id, null))
+        assertEquals(id, workouts.active(TODAY)?.workout?.id)
+        assertEquals(id, workouts.startEmpty(TODAY, NOW + 1))
+        // A day's workout, or one on another day, is another workout.
+        assertNotEquals(id, start(pushA))
+        assertNotEquals(id, workouts.startEmpty(TODAY + 1, NOW))
+    }
+
+    @Test
+    fun anEmptyWorkoutListsItsExercisesAsTheyWereAdded() = runBlocking {
+        val id = workouts.startEmpty(TODAY, NOW)
+        val bench = pushA.exercises[0].exercise.id
+        val fly = pushA.exercises[1].exercise.id
+        workouts.addSetLikeLast(id, fly, null, defaultWeightKg = 20.0)
+        workouts.addSetLikeLast(id, bench, null, defaultWeightKg = 20.0)
+        workouts.addSetLikeLast(id, fly, null, defaultWeightKg = 20.0)
+        val exercises = workouts.exercises(id, null)
+        assertEquals(listOf(fly, bench), exercises.map { it.exercise.id })
+        assertEquals(listOf(2, 1), exercises.map { it.sets.size })
+        // Never done before, so 12 reps of the default weight.
+        assertEquals(12, exercises[0].sets[0].reps)
+        assertEquals(20.0, exercises[0].sets[0].weightKg)
+        assertTrue(exercises.flatMap { it.sets }.all { it.isAdded && !it.isDone })
+    }
+
+    @Test
+    fun finishingAnEmptyWorkoutLeavesThePlanAlone() = runBlocking {
+        val day = start(pushA)
+        workouts.setDone(sets(day).first().id, true)
+        workouts.finish(day, FinishMode.KeepSkipped, addNewSets = false, now = NOW)
+        val before = database.plans().plan(plan.plan.id)
+
+        val id = workouts.startEmpty(TODAY, NOW + 1)
+        val squat = pullA.exercises[0].exercise.id
+        workouts.setDone(workouts.addSetLikeLast(id, squat, null, defaultWeightKg = 20.0), true)
+        workouts.addSetLikeLast(id, squat, null, defaultWeightKg = 20.0)
+        // Without a day, Finish has nothing to add the new sets to.
+        assertEquals(0, WorkoutProgress(workouts.exercises(id, null), hasDay = false).addedDoneCount)
+        workouts.finish(id, FinishMode.Discard, addNewSets = true, now = NOW + 2)
+
+        assertEquals(before, database.plans().plan(plan.plan.id))
+        assertTrue(assertNotNull(workouts.workout(id)).workout.isFinished)
+        assertEquals(1, sets(id).size)
+        // Today still goes on from the last day done.
+        assertEquals(pushA.day.id, workouts.lastDoneDayId())
+    }
+
+    @Test
     fun aWorkoutFromYesterdayIsStillGoing() = runBlocking {
         val id = start(pushA, on = TODAY - 1)
         val active = workouts.active(TODAY)

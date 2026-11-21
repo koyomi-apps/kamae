@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
@@ -52,12 +53,14 @@ import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import ca.gureet.kitae.R
 import ca.gureet.kitae.app.Library
 import ca.gureet.kitae.app.Route
@@ -76,6 +79,7 @@ import ca.gureet.kitae.model.WeightFormatter
 import ca.gureet.kitae.muscles.MuscleLine
 import ca.gureet.kitae.muscles.MuscleWork
 import ca.gureet.kitae.ui.components.Hairline
+import ca.gureet.kitae.ui.components.Caption
 import ca.gureet.kitae.ui.components.KamaeIcon
 import ca.gureet.kitae.ui.components.MauveButton
 import ca.gureet.kitae.ui.theme.KitaeType
@@ -199,6 +203,15 @@ fun WorkoutScreen(
                         },
                     )
                 }
+                item(key = "add") {
+                    Column(Modifier.widthIn(max = 600.dp).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                        if (workout.exercises.isEmpty()) EmptyWorkoutHint()
+                        AddExerciseButton(onClick = {
+                            focusManager.clearFocus()
+                            onOpen(Route.WorkoutPicker)
+                        })
+                    }
+                }
             }
         }
         if (focused == null) {
@@ -231,7 +244,14 @@ fun WorkoutScreen(
         ExerciseNoteSheet(exercise.name, notes[exercise.id], onSave = { actions.saveNote(exercise.id, it) }, onDismiss = { noteFor = null })
     }
     question?.let { asked ->
-        FinishQuestionDialog(asked, dayName, workout.progress.addedDoneCount, onQuestion = { question = it }, onFinish = actions::finish)
+        FinishQuestionDialog(
+            asked,
+            dayName,
+            workout.progress.addedDoneCount,
+            onQuestion = { question = it },
+            onFinish = actions::finish,
+            hasDay = workout.dayId != null,
+        )
     }
     if (confirmDiscard) {
         AlertDialog(
@@ -463,5 +483,30 @@ internal fun StepButton(text: String, onClick: () -> Unit) {
     val colors = kitaeColors
     Surface(onClick = onClick, shape = CircleShape, color = colors.field, contentColor = colors.ink) {
         Text(text, Modifier.padding(horizontal = 14.dp, vertical = 9.dp), style = KitaeType.step)
+    }
+}
+
+/** What an empty workout shows until it has an exercise. */
+@Composable
+private fun EmptyWorkoutHint() {
+    Column(Modifier.padding(start = 8.dp, end = 8.dp, top = 16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Caption(stringResource(R.string.caption_empty_workout))
+        Text(stringResource(R.string.empty_workout_text), color = kitaeColors.inkSoft, fontSize = 15.sp)
+    }
+}
+
+/** Adds an exercise to this workout. If the workout has a day, Finish asks whether its sets join the day. */
+@Composable
+private fun AddExerciseButton(onClick: () -> Unit) {
+    val colors = kitaeColors
+    Surface(onClick = onClick, shape = CircleShape, color = colors.field, contentColor = colors.olive, modifier = Modifier.fillMaxWidth()) {
+        Row(
+            Modifier.heightIn(min = 54.dp).padding(horizontal = 20.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            KamaeIcon(R.drawable.ic_add, null, tint = colors.olive, size = 20.dp)
+            Text(stringResource(R.string.add_exercise), color = colors.olive, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
     }
 }

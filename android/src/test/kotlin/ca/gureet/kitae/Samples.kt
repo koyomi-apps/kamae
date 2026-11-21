@@ -145,6 +145,12 @@ object Samples {
 
     val inProgress = today.copy(workout = workout, isWorkoutPresented = true)
 
+    /** An empty workout just started, without a day or plan. */
+    val emptyWorkout = today.copy(
+        workout = WorkoutState(Workout(date = 20_736, planId = null, dayId = null, isFinished = false, startedAt = NOW - 30_000, id = 8), null, emptyList()),
+        isWorkoutPresented = true,
+    )
+
     /** Backups going to a folder picked on the phone, the last one an hour ago. */
     val backedUp = today.copy(
         backup = BackupState(BackupPlace("content://com.android.externalstorage.documents/tree/primary%3AKamae", NOW / 1000 - 3600), "Kamae"),
@@ -318,10 +324,13 @@ class RecordedActions : AppActions {
     override fun setTextSize(size: TextSize?) { calls += "setTextSize $size" }
     override fun pickDay(id: Long) { calls += "pickDay $id" }
     override fun start(day: DayWithExercises) { calls += "start ${day.day.name}" }
+    override fun startEmpty() { calls += "startEmpty" }
     override fun selectPlan(id: Long) { calls += "selectPlan $id" }
     override fun choosePlan(open: Boolean) { calls += "choosePlan $open" }
     override fun presentWorkout(open: Boolean) { calls += "presentWorkout $open" }
-    override fun finishAndStart(mode: FinishMode, addNewSets: Boolean, day: DayWithExercises) { calls += "finishAndStart $mode ${day.day.name}" }
+    override fun finishAndStart(mode: FinishMode, addNewSets: Boolean, day: DayWithExercises?) {
+        calls += "finishAndStart $mode ${day?.day?.name ?: "empty"}"
+    }
     override fun deleteWorkout(id: Long) { calls += "deleteWorkout $id" }
     override suspend fun saveExercise(draft: ExerciseDraft, id: Long?): Long = 999L.also { calls += "saveExercise ${draft.name} $id" }
     override fun deleteExercise(id: Long) { calls += "deleteExercise $id" }

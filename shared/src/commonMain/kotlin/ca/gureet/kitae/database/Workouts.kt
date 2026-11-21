@@ -48,6 +48,15 @@ abstract class Workouts(private val database: KitaeDatabase) {
         return workoutId
     }
 
+    /**
+     * Starts an empty workout, without a day or plan, for exercises added as it goes, and returns
+     * its id. One that was started [today] without a day and isn't finished carries on instead.
+     */
+    @Transaction
+    open suspend fun startEmpty(today: Long, now: Long): Long =
+        unfinishedWithoutDay(today)
+            ?: insertWorkout(Workout(date = today, planId = null, dayId = null, isFinished = false, startedAt = now))
+
     // Reading
 
     /**
@@ -224,6 +233,19 @@ abstract class Workouts(private val database: KitaeDatabase) {
         """,
     )
     protected abstract suspend fun unfinished(dayId: Long, today: Long): Long?
+
+    @Query(
+        """
+        SELECT `id`
+        FROM `sessions`
+        WHERE `date` = :today
+        AND `routineId` IS NULL
+        AND `isFinished` = 0
+        ORDER BY `id` DESC
+        LIMIT 1
+        """,
+    )
+    protected abstract suspend fun unfinishedWithoutDay(today: Long): Long?
 
     @Query("SELECT `planId` FROM `routines` WHERE `id` = :dayId")
     protected abstract suspend fun planOfDay(dayId: Long): Long?

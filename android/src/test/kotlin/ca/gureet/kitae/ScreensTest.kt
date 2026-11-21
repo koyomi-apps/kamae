@@ -75,6 +75,36 @@ class ScreensTest {
     }
 
     @Test
+    fun todayWithoutAPlan() {
+        show(Samples.today.copy(plan = null))
+        capture("today-no-plan")
+        compose.onNodeWithText("Start an empty workout").performClick()
+        compose.onNodeWithText("Choose a plan").performClick()
+        assertEquals(listOf("startEmpty", "choosePlan true"), actions.calls)
+    }
+
+    @Test
+    fun anEmptyWorkoutAfterADay() {
+        show(Samples.inProgress.copy(isWorkoutPresented = false))
+        compose.onNodeWithText("or start an empty workout").performClick()
+        compose.waitForIdle()
+        capture("today-then-empty")
+        compose.onNodeWithText("Keep as skipped").performClick()
+        assertEquals(listOf("finishAndStart KeepSkipped empty"), actions.calls)
+    }
+
+    @Test
+    fun emptyWorkout() {
+        show(Samples.emptyWorkout)
+        capture("workout-empty")
+        compose.onNodeWithText("Add exercise").performClick()
+        compose.waitForIdle()
+        capture("workout-picker")
+        compose.onAllNodesWithText("Pec Dec")[0].performClick()
+        assertEquals(listOf("addSet 102"), actions.calls)
+    }
+
+    @Test
     fun todayDark() {
         show(Samples.today, AppTheme.Dark)
         capture("today-dark")

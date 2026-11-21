@@ -81,6 +81,7 @@ fun TodayScreen(
     onSelectPlan: (Long) -> Unit,
     onChoosePlan: () -> Unit,
     modifier: Modifier = Modifier,
+    onStartEmpty: () -> Unit = {},
     onEditPlan: (dayId: Long?) -> Unit = {},
     onOpenWorkout: (Long) -> Unit = {},
     contentPadding: PaddingValues = PaddingValues(),
@@ -98,6 +99,8 @@ fun TodayScreen(
                     stringResource(R.string.no_plan_text),
                     action = stringResource(R.string.choose_plan),
                     onAction = onChoosePlan,
+                    otherAction = stringResource(if (state.workout == null) R.string.start_empty_workout else R.string.continue_workout_long),
+                    onOtherAction = onStartEmpty,
                 )
             }
             plan.days.isEmpty() -> Centered {
@@ -109,7 +112,7 @@ fun TodayScreen(
                     onAction = { onEditPlan(null) },
                 )
             }
-            else -> Day(state, state.selectedDay ?: plan.days.first(), onPickDay, onStart, { onEditPlan(it) }, line, onOpenWorkout)
+            else -> Day(state, state.selectedDay ?: plan.days.first(), onPickDay, onStart, { onEditPlan(it) }, line, onOpenWorkout, onStartEmpty)
         }
     }
 }
@@ -179,6 +182,7 @@ private fun Day(
     onEdit: (Long) -> Unit,
     line: Int,
     onOpenWorkout: (Long) -> Unit = {},
+    onStartEmpty: () -> Unit = {},
 ) {
     val colors = kitaeColors
     val workout = state.workout
@@ -232,9 +236,19 @@ private fun Day(
             Text(text, style = KitaeType.bigButton, maxLines = 1, overflow = TextOverflow.Ellipsis)
             KamaeIcon(if (isEmpty) R.drawable.ic_edit else R.drawable.ic_start, null, tint = colors.onMauve, size = 18.dp)
         }
+        // A workout without a day, whose exercises are added as it goes.
+        val emptyGoing = workout != null && workout.dayId == null
+        TextButton(onClick = onStartEmpty, modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp)) {
+            Text(
+                stringResource(if (emptyGoing) R.string.continue_empty_workout else R.string.or_start_empty_workout),
+                color = colors.olive,
+                style = KitaeType.smallCaption,
+                fontWeight = FontWeight.Bold,
+            )
+        }
         Text(
             stringArrayResource(R.array.today_lines)[line % 6],
-            Modifier.fillMaxWidth().padding(start = 24.dp, end = 24.dp, top = 14.dp),
+            Modifier.fillMaxWidth().padding(start = 24.dp, end = 24.dp, top = 2.dp),
             color = colors.inkSoft,
             style = KitaeType.sectionCaption,
             textAlign = TextAlign.Center,

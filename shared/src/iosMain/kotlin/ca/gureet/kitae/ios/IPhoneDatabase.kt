@@ -191,6 +191,9 @@ class IPhoneDatabase(private val path: String, seed: String) {
     fun startWorkout(dayId: Long, today: Long, now: Long): Long = blocking { database.workouts().start(dayId, today, now) }
 
     @Throws(Exception::class)
+    fun startEmptyWorkout(today: Long, now: Long): Long = blocking { database.workouts().startEmpty(today, now) }
+
+    @Throws(Exception::class)
     fun activeWorkout(today: Long): WorkoutWithDay? = blocking { database.workouts().active(today) }
 
     @Throws(Exception::class)

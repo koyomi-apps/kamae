@@ -247,6 +247,26 @@ final class AppModel {
         }
     }
 
+    /// Starts an empty workout, without a day, whose exercises are added as it goes. While a
+    /// workout is going, an empty one comes back to the screen, and a day's stays as it is.
+    func startEmptyWorkout(at time: Date? = nil) {
+        if let workout {
+            if workout.dayID == nil { isWorkoutPresented = true }
+            return
+        }
+        let now = time ?? clock()
+        do {
+            let id = try database.write { db in
+                try Sessions.startEmpty(db, today: EpochDay.of(now), now: now.epochMilliseconds)
+            }
+            workout = try makeWorkout(id: id)
+            historyRevision += 1
+            isWorkoutPresented = workout != nil
+        } catch {
+            report(error, "Couldn't start the workout")
+        }
+    }
+
     /// Ends the workout. Today moves on to the plan's next day. With a set done, its summary
     /// opens once the workout has closed, unless Settings say not to or `showsSummary` is false,
     /// as when another day starts straight after.

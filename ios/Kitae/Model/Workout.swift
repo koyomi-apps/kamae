@@ -139,6 +139,17 @@ final class Workout: Identifiable {
         }
     }
 
+    /// Adds an exercise to this workout only, with a set like the last time it was done.
+    func addExercise(_ exerciseID: Exercise.ID) {
+        let sessionID = id
+        let dayID = dayID
+        let defaultWeightKg = defaultWeightKg
+        save { db in
+            try Sessions.addSetLikeLast(db, sessionID: sessionID, exerciseID: exerciseID, dayID: dayID,
+                                        defaultWeightKg: defaultWeightKg)
+        }
+    }
+
     func deleteSet(_ id: WorkoutSet.ID) {
         save { db in try Sessions.deleteSet(db, setID: id) }
     }
