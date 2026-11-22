@@ -10,9 +10,14 @@
 
     python3 scripts/testflight.py what-to-test VERSION BUILD NOTES_FILE
         Waits until App Store Connect has processed the build, then fills in its What to Test
-        from NOTES_FILE, in each of the app's TestFlight languages. Needs the environment
-        variables APP_STORE_CONNECT_KEY_ID, APP_STORE_CONNECT_ISSUER_ID and
-        APP_STORE_CONNECT_KEY_PATH, the API key's .p8 file.
+        from NOTES_FILE, in each of the app's TestFlight languages.
+
+    python3 scripts/testflight.py name NAME
+        Gives the app NAME on App Store Connect, which TestFlight and the App Store show, in each
+        of its languages, if it isn't called that already. (The name under the icon is the build's.)
+
+The last two need the environment variables APP_STORE_CONNECT_KEY_ID,
+APP_STORE_CONNECT_ISSUER_ID and APP_STORE_CONNECT_KEY_PATH, the API key's .p8 file.
 
 Needs only Python's standard library, and the openssl command, which signs the API's tokens.
 """
@@ -112,11 +117,37 @@ def call(method: str, path: str, query: dict | None = None, body: dict | None = 
     return json.loads(data) if data else {}
 
 
-def what_to_test(version: str, build: str, notes: str) -> None:
+def app_id() -> str:
     apps = call("GET", "/apps", {"filter[bundleId]": BUNDLE_ID, "fields[apps]": "bundleId"})["data"]
     if not apps:
         sys.exit(f"App Store Connect has no app {BUNDLE_ID} that this key can see.")
-    app = apps[0]["id"]
+    return apps[0]["id"]
+
+
+def rename(name: str) -> None:
+    app = app_id()
+    # An app has one set of app information that can change, and one per version on the App Store.
+    fixed = {"READY_FOR_DISTRIBUTION", "REPLACED_WITH_NEW_INFO", "WAITING_FOR_REVIEW", "IN_REVIEW",
+             "ACCEPTED", "PENDING_RELEASE"}
+    infos = [info for info in call("GET", f"/apps/{app}/appInfos")["data"]
+             if (info["attributes"].get("state") or info["attributes"].get("appStoreState")) not in fixed]
+    if not infos:
+        sys.exit("App Store Connect has no app information that can change now: the name changes "
+                 "with the next version.")
+    localizations = call("GET", f"/appInfos/{infos[0]['id']}/appInfoLocalizations",
+                         {"fields[appInfoLocalizations]": "locale,name"})["data"]
+    for item in localizations:
+        locale, old = item["attributes"]["locale"], item["attributes"].get("name")
+        if old == name:
+            print(f"The app is already called {name} in {locale}.")
+            continue
+        call("PATCH", f"/appInfoLocalizations/{item['id']}", body={"data": {
+            "type": "appInfoLocalizations", "id": item["id"], "attributes": {"name": name}}})
+        print(f"The app is now called {name} in {locale}, not {old}.")
+
+
+def what_to_test(version: str, build: str, notes: str) -> None:
+    app = app_id()
     # The build shows up a few minutes after the upload, and is processed some minutes later.
     deadline = time.time() + 45 * 60
     said = None
@@ -165,6 +196,9 @@ def main(args: list[str]) -> None:
             return
     if len(args) == 4 and args[0] == "what-to-test":
         what_to_test(args[1], args[2], Path(args[3]).read_text(encoding="utf-8").strip())
+        return
+    if len(args) == 2 and args[0] == "name" and args[1].strip():
+        rename(args[1].strip())
         return
     sys.exit(__doc__)
 
