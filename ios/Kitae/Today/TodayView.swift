@@ -7,8 +7,8 @@ import SwiftUI
 struct TodayView: View {
     @Environment(AppModel.self) private var model
     @State private var line = TodayLines.random()
-    /// The day to start once the workout in progress is finished.
-    @State private var switchingTo: TrainingDay?
+    /// What starts once the workout in progress is finished.
+    @State private var switchingTo: NextWorkout?
     @State private var finishQuestion: FinishQuestion?
     /// The plan being edited, pushed over Today.
     @State private var editing: PlanEditor?
@@ -26,6 +26,9 @@ struct TodayView: View {
                             .padding(.top, 28)
                         startButton(day)
                             .padding(.top, 18)
+                            .padding(.horizontal, 24)
+                        emptyWorkoutButton
+                            .padding(.top, 4)
                             .padding(.horizontal, 24)
                         Text(line)
                             .font(.kitaeMono(12, relativeTo: .caption))
@@ -48,10 +51,17 @@ struct TodayView: View {
                     ContentUnavailableView {
                         Label("No plan yet", systemImage: "calendar")
                     } description: {
-                        Text("Choose a plan to follow, and Kamae lines up its days for you.")
+                        Text("Choose a plan to follow, and Kamae lines up its days for you. Or start an empty workout, and add exercises as you go.")
                     } actions: {
                         Button("Choose a plan") { model.isChoosingPlan = true }
                             .buttonStyle(.borderedProminent)
+                        Button(model.workout == nil ? "Start an empty workout" : "Continue workout") {
+                            if model.workout == nil {
+                                model.startEmptyWorkout()
+                            } else {
+                                model.isWorkoutPresented = true
+                            }
+                        }
                     }
                     .padding(.top, 80)
                 } else {
@@ -144,7 +154,7 @@ struct TodayView: View {
             if isEmpty {
                 edit(day)
             } else if let workout = model.workout, workout.dayID != day.id {
-                switchingTo = day
+                switchingTo = .day(day)
                 finishQuestion = FinishQuestion.first(for: workout, startingAnotherDay: true)
             } else {
                 model.startWorkout(day)
@@ -166,8 +176,31 @@ struct TodayView: View {
         ) { mode, addNewSets in
             guard let next = switchingTo else { return }
             model.finishWorkout(mode, addNewSets: addNewSets, showsSummary: false)
-            model.startWorkout(next)
+            switch next {
+            case .day(let day): model.startWorkout(day)
+            case .empty: model.startEmptyWorkout()
+            }
         }
+    }
+
+    /// Starts a workout without a day, whose exercises are added as it goes.
+    private var emptyWorkoutButton: some View {
+        let continues = model.workout != nil && model.workout?.dayID == nil
+        return Button {
+            if let workout = model.workout, workout.dayID != nil {
+                switchingTo = .empty
+                finishQuestion = FinishQuestion.first(for: workout, startingAnotherDay: true)
+            } else {
+                model.startEmptyWorkout()
+            }
+        } label: {
+            Text(continues ? "continue the empty workout" : "or start an empty workout")
+                .font(.kitaeMono(13, relativeTo: .footnote, bold: true))
+                .foregroundStyle(.olive)
+                .frame(maxWidth: .infinity, minHeight: 44)
+                .contentShape(.rect)
+        }
+        .buttonStyle(.plain)
     }
 
     /// Today's finished workouts: how long they took, their sets, and the energy they used.
@@ -311,7 +344,7 @@ extension TodayView {
               let next = model.days.first(where: { $0.id != workout.dayID }) else { return }
         try? await Task.sleep(for: .milliseconds(700))
         model.pickedDayID = next.id
-        switchingTo = next
+        switchingTo = .day(next)
         finishQuestion = FinishQuestion.first(for: workout, startingAnotherDay: true)
         #endif
     }
@@ -330,5 +363,18 @@ enum TodayLines {
 
     static func random() -> String {
         all.randomElement() ?? all[0]
+    }
+}
+
+/// What Today starts once the workout in progress is finished.
+private enum NextWorkout {
+    case day(TrainingDay)
+    case empty
+
+    var name: String {
+        switch self {
+        case .day(let day): day.name
+        case .empty: "an empty workout"
+        }
     }
 }

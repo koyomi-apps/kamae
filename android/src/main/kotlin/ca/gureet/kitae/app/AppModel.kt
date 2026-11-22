@@ -264,6 +264,8 @@ class AppModel(
     /** Starts a workout of [day], or opens it again when it's the one going. */
     override fun start(day: DayWithExercises) = launch { begin(day) }
 
+    override fun startEmpty() = launch { beginEmpty() }
+
     private suspend fun begin(day: DayWithExercises) {
         val going = state.workout
         if (going != null) {
@@ -276,22 +278,40 @@ class AppModel(
         reload()
     }
 
-    /** Ends the workout; Today moves on to the plan's next day. [then] starts another day after it. */
-    fun finishWorkout(mode: FinishMode, addNewSets: Boolean, then: DayWithExercises? = null) = launch {
+    /** An empty workout comes back to the screen if one is going; a day's stays as it is. */
+    private suspend fun beginEmpty() {
+        val going = state.workout
+        if (going != null) {
+            if (going.dayId == null) state = state.copy(isWorkoutPresented = true)
+            return
+        }
+        val now = clock()
+        database.workouts().startEmpty(today(now), now)
+        state = state.copy(isWorkoutPresented = true)
+        reload()
+    }
+
+    /**
+     * Ends the workout; Today moves on to the plan's next day. [then] starts another day after it,
+     * or [thenEmpty] an empty workout.
+     */
+    fun finishWorkout(mode: FinishMode, addNewSets: Boolean, then: DayWithExercises? = null, thenEmpty: Boolean = false) = launch {
         val workout = state.workout ?: return@launch
-        // Its summary, with a set done, unless Settings say not to or another day starts after it.
-        val summary = then == null && settings.value.showsWorkoutSummary && workout.progress.doneCount > 0
+        // Its summary, with a set done, unless Settings say not to or another workout starts after it.
+        val summary = then == null && !thenEmpty && settings.value.showsWorkoutSummary && workout.progress.doneCount > 0
         database.workouts().finish(workout.id, mode, addNewSets, clock())
         close(workout.id)
         reload()
         if (summary) state = state.copy(finishedWorkoutId = workout.id)
         if (settings.value.backUpAfterWorkouts && state.backup.place.folderUri != null) backUp()
         if (then != null) state.days.firstOrNull { it.day.id == then.day.id }?.let { begin(it) }
+        if (thenEmpty) beginEmpty()
     }
 
     override fun finish(mode: FinishMode, addNewSets: Boolean) = finishWorkout(mode, addNewSets)
 
-    override fun finishAndStart(mode: FinishMode, addNewSets: Boolean, day: DayWithExercises) = finishWorkout(mode, addNewSets, day)
+    override fun finishAndStart(mode: FinishMode, addNewSets: Boolean, day: DayWithExercises?) =
+        finishWorkout(mode, addNewSets, then = day, thenEmpty = day == null)
 
     override fun minimize() = presentWorkout(false)
 

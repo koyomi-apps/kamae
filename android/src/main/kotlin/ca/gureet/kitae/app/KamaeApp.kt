@@ -102,10 +102,14 @@ import kotlinx.datetime.TimeZone
 interface AppActions : WorkoutActions, EditActions, SettingsActions, BodyActions {
     fun pickDay(id: Long)
     fun start(day: DayWithExercises)
+
+    /** Starts an empty workout, without a day, whose exercises are added as it goes. */
+    fun startEmpty()
     fun selectPlan(id: Long)
     fun choosePlan(open: Boolean)
     fun presentWorkout(open: Boolean)
-    fun finishAndStart(mode: FinishMode, addNewSets: Boolean, day: DayWithExercises)
+    /** Finishes the workout and starts [day], or an empty workout when it's null. */
+    fun finishAndStart(mode: FinishMode, addNewSets: Boolean, day: DayWithExercises?)
 
     /** The summary after a workout is done with. */
     fun closeSummary()
@@ -138,7 +142,7 @@ fun KamaeRoot(
 ) {
     val colors = kitaeColors
     val scope = rememberCoroutineScope()
-    var switchingTo by remember { mutableStateOf<DayWithExercises?>(null) }
+    var switchingTo by remember { mutableStateOf<NextWorkout?>(null) }
     var question by remember { mutableStateOf<FinishQuestion?>(null) }
     val formatter = remember(settings.unit, settings.decimals) { WeightFormatter(settings.unit, settings.decimals, phoneDecimalSeparator()) }
     val today = EpochDay.of(Instant.fromEpochMilliseconds(frozenNow ?: System.currentTimeMillis()), TimeZone.currentSystemDefault())
@@ -154,7 +158,17 @@ fun KamaeRoot(
             actions.start(day)
             return
         }
-        switchingTo = day
+        switchingTo = NextWorkout(day)
+        question = FinishQuestion.first(going.progress, startingAnotherDay = true)
+    }
+
+    fun startEmpty() {
+        val going = state.workout
+        if (going == null || going.dayId == null) {
+            actions.startEmpty()
+            return
+        }
+        switchingTo = NextWorkout(null)
         question = FinishQuestion.first(going.progress, startingAnotherDay = true)
     }
 
@@ -165,6 +179,7 @@ fun KamaeRoot(
                     state,
                     onPickDay = actions::pickDay,
                     onStart = ::start,
+                    onStartEmpty = ::startEmpty,
                     onSelectPlan = actions::selectPlan,
                     onChoosePlan = { actions.choosePlan(true) },
                     onEditPlan = { dayId -> state.plan?.let { nav.open(Route.PlanEditor(it.plan.id, dayId)) } },
@@ -269,6 +284,23 @@ fun KamaeRoot(
                             actions.addExerciseToDay(route.dayId, exerciseId)
                             nav.back()
                         }
+                    },
+                    onBack = nav.back,
+                    onSaveExercise = { actions.saveExercise(it, null) },
+                )
+            }
+            Route.WorkoutPicker -> {
+                val inWorkout = state.workout?.exercises?.map { it.exercise.id }?.toSet().orEmpty()
+                val list = rememberPage(route) { pages.exerciseList(recent = RECENT_IN_PICKER + inWorkout.size) }
+                ExercisePickerScreen(
+                    list?.value,
+                    stringResource(R.string.add_to_this_workout),
+                    inWorkout,
+                    settings.defaultRestSeconds,
+                    onPick = { exerciseId ->
+                        // Its first set, like the last time it was done.
+                        actions.addSet(exerciseId)
+                        nav.back()
                     },
                     onBack = nav.back,
                     onSaveExercise = { actions.saveExercise(it, null) },
@@ -394,13 +426,17 @@ fun KamaeRoot(
             onQuestion = { question = it },
             onFinish = { mode, addNewSets ->
                 switchingTo = null
-                actions.finishAndStart(mode, addNewSets, next)
+                actions.finishAndStart(mode, addNewSets, next.day)
             },
-            nextDayName = next.day.name,
+            nextDayName = next.day?.day?.name ?: stringResource(R.string.an_empty_workout),
             onContinue = { actions.presentWorkout(true) },
+            hasDay = going.dayId != null,
         )
     }
 }
+
+/** What starts once the workout in progress is finished: [day], or an empty workout. */
+private data class NextWorkout(val day: DayWithExercises?)
 
 /** What a page has read, once it has: [value] may be null for something that's gone. */
 class Loaded<T>(val value: T)
