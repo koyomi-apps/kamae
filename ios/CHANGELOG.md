@@ -2,7 +2,7 @@
 
 What's new in each build of Kamae for iPhone, called Kitae until November 2026. Builds go to [TestFlight](https://testflight.apple.com/join/GTKbw4Hg), and from 1.0 (2) each one is also on [GitHub's Releases page](https://github.com/koyomi-apps/kamae/releases) as an IPA for sideloading.
 
-## Next build
+## 1.0 (5) · 2026-11-21
 
 - **Kitae is now Kamae.** Another workout log on the App Store already went by Kitae, so the app has a name of its own: 構え, a stance, the ready position before you move. It updates over Kitae as before and keeps your plans, workouts, settings and backups.
 - **Workouts without a plan.** Start an empty workout from Today, with a plan or without one, and add exercises as you go. Each starts with a set like the last time you did it. Any workout can now take more exercises, with Add exercise at the end of the list, and in a day's workout Finish asks whether they join the day for next time. Asked for in issue #38.
