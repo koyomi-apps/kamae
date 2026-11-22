@@ -8,8 +8,8 @@
 #   scripts/make_ipa.sh [BUILD]
 #
 # BUILD is the build number to give it, normally the project's own (leave it out). The IPA goes
-# into build/ipa/ as Kitae-VERSION-BUILD.ipa, with its SHA-256 beside it. Needs Xcode; nothing
-# is signed or uploaded. Kitae has no entitlements, so an unsigned copy loses nothing.
+# into build/ipa/ as Kamae-VERSION-BUILD.ipa, with its SHA-256 beside it. Needs Xcode; nothing
+# is signed or uploaded. Kamae has no entitlements, so an unsigned copy loses nothing.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -24,7 +24,7 @@ if [ -n "$(git status --porcelain --untracked-files=no)" ]; then
 fi
 
 out="build/ipa"
-archive="$out/Kitae.xcarchive"
+archive="$out/Kamae.xcarchive"
 rm -rf "$archive" "$out/Payload"
 mkdir -p "$out"
 
@@ -39,7 +39,7 @@ xcodebuild "${args[@]}" -quiet archive
 app="$archive/Products/Applications/Kitae.app"
 version=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$app/Info.plist")
 number=$(/usr/libexec/PlistBuddy -c "Print :CFBundleVersion" "$app/Info.plist")
-ipa="Kitae-$version-$number.ipa"
+ipa="Kamae-$version-$number.ipa"
 
 mkdir -p "$out/Payload"
 ditto "$app" "$out/Payload/Kitae.app"

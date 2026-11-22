@@ -1,0 +1,217 @@
+name: TestFlight
+
+# On a tag like ios-v1.0-5: builds Kamae for iPhone on a GitHub Mac, signs it with Kamae's
+# distribution certificate and profiles from the ios-release environment (only ios-v* tags can use
+# it, and each run waits for gureet's approval) and uploads it to TestFlight with an App Store
+# Connect API key. Then it puts an unsigned IPA for sideloading on the tag's GitHub release, and
+# fills in TestFlight's What to Test from the build's section of ios/CHANGELOG.md. The tag can be
+# pushed with git, or made on GitHub's website by publishing a release for it: then the IPA goes on
+# that release.
+#
+# Pull requests that change this file or its scripts run all of it but the signing and uploading,
+# for the version in the project.
+
+on:
+  push:
+    tags:
+      - "ios-v*"
+  pull_request:
+    paths:
+      - ".github/workflows/testflight.yml"
+      - "scripts/make_ipa.sh"
+      - "scripts/testflight.py"
+
+permissions:
+  contents: write
+
+jobs:
+  testflight:
+    name: Build the iPhone app for TestFlight
+    runs-on: xcode-27
+    timeout-minutes: 90
+    # Pull requests get no environment, so none of its secrets.
+    environment: ${{ github.event_name == 'push' && 'ios-release' || '' }}
+    env:
+      UPLOAD: ${{ github.event_name == 'push' }}
+    steps:
+      - uses: actions/checkout@v7
+
+      # Xcode's build phase runs Gradle, which builds KitaeCore, the shared Kotlin module.
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Check the tag matches the app's version
+        id: version
+        run: |
+          project=ios/Kitae.xcodeproj/project.pbxproj
+          version="$(sed -n 's/^[[:space:]]*MARKETING_VERSION = \(.*\);$/\1/p' "$project" | sort -u)"
+          build="$(sed -n 's/^[[:space:]]*CURRENT_PROJECT_VERSION = \(.*\);$/\1/p' "$project" | sort -u)"
+          if [ "$(printf '%s\n' "$version" | wc -l)" -ne 1 ] || [ "$(printf '%s\n' "$build" | wc -l)" -ne 1 ]; then
+            echo "::error::The project's targets don't all have the same version and build number:" $version "/" $build
+            exit 1
+          fi
+          if [ "$UPLOAD" = true ] && [ "${GITHUB_REF_NAME#ios-v}" != "$version-$build" ]; then
+            echo "::error::The tag is for ${GITHUB_REF_NAME#ios-v}, but the project is $version ($build), whose tag is ios-v$version-$build."
+            exit 1
+          fi
+          echo "Kamae $version ($build)"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "build=$build" >> "$GITHUB_OUTPUT"
+
+      - name: Write What to Test from the changelog
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          BUILD: ${{ steps.version.outputs.build }}
+        run: |
+          python3 scripts/testflight.py notes "$VERSION" "$BUILD" > "$RUNNER_TEMP/what-to-test.txt"
+          python3 scripts/testflight.py notes --markdown "$VERSION" "$BUILD" > "$RUNNER_TEMP/changelog.md"
+          cat "$RUNNER_TEMP/what-to-test.txt"
+
+      - name: Build the unsigned IPA
+        run: scripts/make_ipa.sh
+
+      - name: Set up signing
+        if: env.UPLOAD == 'true'
+        env:
+          DISTRIBUTION_CERTIFICATE: ${{ secrets.DISTRIBUTION_CERTIFICATE }}
+          DISTRIBUTION_CERTIFICATE_PASSWORD: ${{ secrets.DISTRIBUTION_CERTIFICATE_PASSWORD }}
+          APP_PROFILE: ${{ secrets.APP_PROFILE }}
+          WIDGETS_PROFILE: ${{ secrets.WIDGETS_PROFILE }}
+          APP_STORE_CONNECT_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          APP_STORE_CONNECT_KEY: ${{ secrets.APP_STORE_CONNECT_KEY }}
+        run: |
+          # A keychain of its own for the certificate, which codesign may use without asking.
+          keychain="$RUNNER_TEMP/signing.keychain-db"
+          password="$(openssl rand -base64 24)"
+          security create-keychain -p "$password" "$keychain"
+          security set-keychain-settings -lut 21600 "$keychain"
+          security unlock-keychain -p "$password" "$keychain"
+          certificate="$RUNNER_TEMP/certificate.p12"
+          printf '%s' "$DISTRIBUTION_CERTIFICATE" | base64 --decode > "$certificate"
+          security import "$certificate" -P "$DISTRIBUTION_CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k "$keychain" > /dev/null
+          rm -f "$certificate"
+          security set-key-partition-list -S apple-tool:,apple: -k "$password" "$keychain" > /dev/null
+          security list-keychains -d user -s "$keychain" $(security list-keychains -d user | tr -d '"')
+          if ! security find-identity -v -p codesigning "$keychain" | grep '"Apple Distribution: ' > /dev/null; then
+            echo "::error::DISTRIBUTION_CERTIFICATE has no Apple Distribution certificate with its private key."
+            exit 1
+          fi
+          echo "KEYCHAIN=$keychain" >> "$GITHUB_ENV"
+          # Xcode 16 and later look for profiles in UserData, and earlier ones in MobileDevice.
+          for secret in APP_PROFILE WIDGETS_PROFILE; do
+            profile="$RUNNER_TEMP/$secret.mobileprovision"
+            printf '%s' "${!secret}" | base64 --decode > "$profile"
+            security cms -D -i "$profile" -o "$RUNNER_TEMP/$secret.plist"
+            uuid="$(/usr/libexec/PlistBuddy -c 'Print :UUID' "$RUNNER_TEMP/$secret.plist")"
+            for folder in "$HOME/Library/Developer/Xcode/UserData/Provisioning Profiles" \
+                "$HOME/Library/MobileDevice/Provisioning Profiles"; do
+              mkdir -p "$folder"
+              cp "$profile" "$folder/$uuid.mobileprovision"
+            done
+            echo "$secret: $(/usr/libexec/PlistBuddy -c 'Print :Name' "$RUNNER_TEMP/$secret.plist"), until $(/usr/libexec/PlistBuddy -c 'Print :ExpirationDate' "$RUNNER_TEMP/$secret.plist")"
+          done
+          key="$RUNNER_TEMP/AuthKey_$APP_STORE_CONNECT_KEY_ID.p8"
+          (umask 077 && printf '%s\n' "$APP_STORE_CONNECT_KEY" > "$key")
+          echo "APP_STORE_CONNECT_KEY_PATH=$key" >> "$GITHUB_ENV"
+
+      - name: Archive it, signed
+        if: env.UPLOAD == 'true'
+        run: |
+          xcodebuild archive -project ios/Kitae.xcodeproj -scheme Kitae -configuration Release \
+            -destination generic/platform=iOS -archivePath "$RUNNER_TEMP/Kamae.xcarchive" \
+            OTHER_CODE_SIGN_FLAGS="--keychain $KEYCHAIN" > "$RUNNER_TEMP/archive.log" 2>&1 \
+            || { grep -E ' error: |^error: |^e: |What went wrong' "$RUNNER_TEMP/archive.log" | head -50; tail -40 "$RUNNER_TEMP/archive.log"; exit 1; }
+
+      - name: Upload it to TestFlight
+        if: env.UPLOAD == 'true'
+        env:
+          APP_STORE_CONNECT_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+        run: |
+          cat > "$RUNNER_TEMP/ExportOptions.plist" <<'PLIST'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>method</key>
+            <string>app-store-connect</string>
+            <key>destination</key>
+            <string>upload</string>
+            <key>teamID</key>
+            <string>YCYH5RG9N2</string>
+            <key>signingStyle</key>
+            <string>manual</string>
+            <key>signingCertificate</key>
+            <string>Apple Distribution</string>
+            <key>provisioningProfiles</key>
+            <dict>
+              <key>ca.gureet.kitae</key>
+              <string>Kitae App Store</string>
+              <key>ca.gureet.kitae.KitaeWidgets</key>
+              <string>Kitae Widgets App Store</string>
+            </dict>
+            <key>manageAppVersionAndBuildNumber</key>
+            <false/>
+            <key>uploadSymbols</key>
+            <true/>
+          </dict>
+          </plist>
+          PLIST
+          xcodebuild -exportArchive -archivePath "$RUNNER_TEMP/Kamae.xcarchive" \
+            -exportOptionsPlist "$RUNNER_TEMP/ExportOptions.plist" -exportPath "$RUNNER_TEMP/export" \
+            -authenticationKeyPath "$APP_STORE_CONNECT_KEY_PATH" -authenticationKeyID "$APP_STORE_CONNECT_KEY_ID" \
+            -authenticationKeyIssuerID "$APP_STORE_CONNECT_ISSUER_ID" > "$RUNNER_TEMP/upload.log" 2>&1 \
+            || { grep -iE 'error' "$RUNNER_TEMP/upload.log" | head -40; tail -30 "$RUNNER_TEMP/upload.log"; exit 1; }
+          grep -E 'Upload succeeded|Uploaded|EXPORT SUCCEEDED' "$RUNNER_TEMP/upload.log" || true
+
+      - name: Put the IPA on a GitHub release
+        if: env.UPLOAD == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+          BUILD: ${{ steps.version.outputs.build }}
+        run: |
+          ipa="build/ipa/Kamae-$VERSION-$BUILD.ipa"
+          line="- IPA SHA-256: \`$(cut -d ' ' -f 1 "$ipa.sha256")\`"
+          { cat "$RUNNER_TEMP/changelog.md"; echo; echo "$line"; } > notes.md
+          cat notes.md >> "$GITHUB_STEP_SUMMARY"
+          if gh release view "$GITHUB_REF_NAME" --json body --jq .body > written.md 2>/dev/null; then
+            # Published on the website: keep what it says, or the changelog if it says nothing,
+            # and add the IPA and its fingerprint.
+            if grep -q '[^[:space:]]' written.md; then
+              { echo; echo "$line"; } >> written.md
+            else
+              cp notes.md written.md
+            fi
+            gh release edit "$GITHUB_REF_NAME" --prerelease --notes-file written.md
+            gh release upload "$GITHUB_REF_NAME" "$ipa" "$ipa.sha256" --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" "$ipa" "$ipa.sha256" --prerelease --verify-tag \
+              --title "Kamae $VERSION ($BUILD)" --notes-file notes.md
+          fi
+
+      # Last, as it waits for App Store Connect to process the build, which takes a while.
+      - name: Fill in What to Test
+        if: env.UPLOAD == 'true'
+        env:
+          APP_STORE_CONNECT_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          VERSION: ${{ steps.version.outputs.version }}
+          BUILD: ${{ steps.version.outputs.build }}
+        run: python3 scripts/testflight.py what-to-test "$VERSION" "$BUILD" "$RUNNER_TEMP/what-to-test.txt"
+
+      - name: Remove the keychain and key
+        if: always() && env.UPLOAD == 'true'
+        run: |
+          if [ -n "${KEYCHAIN:-}" ]; then security delete-keychain "$KEYCHAIN" || true; fi
+          rm -f "$RUNNER_TEMP"/AuthKey_*.p8 "$RUNNER_TEMP"/*.mobileprovision "$RUNNER_TEMP"/*_PROFILE.plist
+
+      - name: Keep the IPA
+        if: env.UPLOAD != 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: unsigned-ipa
+          path: build/ipa
+          retention-days: 7
