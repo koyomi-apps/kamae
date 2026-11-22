@@ -33,6 +33,9 @@ jobs:
     environment: ${{ github.event_name == 'push' && 'ios-release' || '' }}
     env:
       UPLOAD: ${{ github.event_name == 'push' }}
+      # What TestFlight and the App Store call the app; each run sets it if it's different. The
+      # name under the icon is the build's own, Kamae.
+      APP_STORE_NAME: "Kamae: Workout Journal"
     steps:
       - uses: actions/checkout@v7
 
@@ -165,6 +168,15 @@ jobs:
             -authenticationKeyIssuerID "$APP_STORE_CONNECT_ISSUER_ID" > "$RUNNER_TEMP/upload.log" 2>&1 \
             || { grep -iE 'error' "$RUNNER_TEMP/upload.log" | head -40; tail -30 "$RUNNER_TEMP/upload.log"; exit 1; }
           grep -E 'Upload succeeded|Uploaded|EXPORT SUCCEEDED' "$RUNNER_TEMP/upload.log" || true
+
+      # Its own step, which doesn't stop the release if App Store Connect won't take the name.
+      - name: Name the app on App Store Connect
+        if: env.UPLOAD == 'true'
+        continue-on-error: true
+        env:
+          APP_STORE_CONNECT_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+        run: python3 scripts/testflight.py name "$APP_STORE_NAME"
 
       - name: Put the IPA on a GitHub release
         if: env.UPLOAD == 'true'
