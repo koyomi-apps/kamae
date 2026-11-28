@@ -332,6 +332,35 @@ struct AppModelTests {
         #expect(fresh.currentPlan == nil)
     }
 
+    @Test func finishingAnEmptyWorkoutAsksFirst() throws {
+        model.startEmptyWorkout()
+        let workout = try #require(model.workout)
+        // With nothing in it, finishing discards it.
+        #expect(FinishQuestion.first(for: workout, startingAnotherDay: false) == .nothingAdded)
+
+        let exercise = try #require(model.selectedDay?.exercises.first?.exercise)
+        workout.addExercise(exercise.id)
+        workout.toggleDone(try #require(workout.exercises.first?.sets.first?.id))
+        #expect(workout.notDoneCount == 0)
+        // Every set is done, but more could be added, so Finish makes sure.
+        #expect(FinishQuestion.first(for: workout, startingAnotherDay: false) == .confirm)
+        #expect(FinishQuestion.first(for: workout, startingAnotherDay: true) == .confirm)
+
+        model.finishWorkout(.keepSkipped, addNewSets: false)
+        #expect(model.workout == nil)
+    }
+
+    @Test func aDayWithEverySetDoneFinishesWithoutAsking() throws {
+        let day = try #require(model.selectedDay)
+        model.startWorkout(day)
+        let workout = try #require(model.workout)
+        for set in workout.exercises.flatMap(\.sets) where !set.isDone {
+            workout.toggleDone(set.id)
+        }
+        #expect(workout.notDoneCount == 0)
+        #expect(FinishQuestion.first(for: workout, startingAnotherDay: false) == nil)
+    }
+
     @Test func anEmptyWorkoutLeavesThePlanAsItIs() throws {
         let day = try #require(model.selectedDay)
         model.startEmptyWorkout()

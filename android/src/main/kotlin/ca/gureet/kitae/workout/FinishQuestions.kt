@@ -36,13 +36,16 @@ sealed interface FinishQuestion {
     /** Nothing was done: keep the workout as skipped, or discard it. */
     data object NothingDone : FinishQuestion
 
+    /** An empty workout has no sets yet, so finishing discards it. */
+    data object NothingAdded : FinishQuestion
+
     /** Some sets weren't done: keep them as skipped, or remove them from the plan too. */
     data class Unfinished(val count: Int) : FinishQuestion
 
     /** Sets were added and done: add them to the day, or keep them in this workout only. */
     data class AddedSets(val count: Int, val mode: FinishMode, override val isFirst: Boolean) : FinishQuestion
 
-    /** Everything planned was done, but another day is being started. */
+    /** Everything was done, but another day is being started, or the workout has no day. */
     data object Confirm : FinishQuestion
 
     /** Whether this is the first question asked, rather than a follow-up. */
@@ -55,7 +58,11 @@ sealed interface FinishQuestion {
             progress.notDoneCount > 0 -> if (progress.doneCount == 0) NothingDone else Unfinished(progress.notDoneCount)
             progress.addedDoneCount > 0 -> AddedSets(progress.addedDoneCount, FinishMode.KeepSkipped, isFirst = true)
             startingAnotherDay -> Confirm
-            else -> null
+            // A day's workout is over when its sets are done, but an empty workout can always take
+            // another exercise, so Finish makes sure first.
+            progress.hasDay -> null
+            progress.setCount == 0 -> NothingAdded
+            else -> Confirm
         }
     }
 }
@@ -88,13 +95,14 @@ fun FinishQuestionDialog(
         if (nextDayName != null && question.isFirst) add(stringResource(R.string.not_finished_start_other, dayName, nextDayName))
         when (question) {
             FinishQuestion.NothingDone -> add(stringResource(R.string.nothing_done))
+            FinishQuestion.NothingAdded -> add(stringResource(R.string.nothing_added))
             is FinishQuestion.Unfinished -> if (hasDay) {
                 add(pluralStringResource(R.plurals.sets_not_done, question.count, question.count, dayName))
             } else {
                 add(pluralStringResource(R.plurals.sets_not_done_no_day, question.count, question.count))
             }
             is FinishQuestion.AddedSets -> add(pluralStringResource(R.plurals.sets_added, question.count, question.count, dayName))
-            FinishQuestion.Confirm -> Unit
+            FinishQuestion.Confirm -> if (nextDayName == null) add(stringResource(R.string.every_set_done))
         }
     }
     fun finishing(mode: FinishMode, addNewSets: Boolean) {
@@ -125,6 +133,7 @@ fun FinishQuestionDialog(
                             Choice(stringResource(R.string.keep_as_skipped)) { finishing(FinishMode.KeepSkipped, false) }
                             Choice(stringResource(R.string.discard_workout)) { finishing(FinishMode.Discard, false) }
                         }
+                        FinishQuestion.NothingAdded -> Choice(stringResource(R.string.discard_workout)) { finishing(FinishMode.Discard, false) }
                         is FinishQuestion.Unfinished -> {
                             Choice(stringResource(R.string.keep_as_skipped)) { askAboutAddedSets(FinishMode.KeepSkipped) }
                             if (hasDay) {
@@ -137,8 +146,10 @@ fun FinishQuestionDialog(
                             Choice(stringResource(R.string.add_to_day, dayName)) { finishing(question.mode, true) }
                             Choice(stringResource(R.string.only_this_workout)) { finishing(question.mode, false) }
                         }
-                        FinishQuestion.Confirm -> Choice(stringResource(R.string.finish_and_start, nextDayName.orEmpty())) {
-                            finishing(FinishMode.KeepSkipped, false)
+                        FinishQuestion.Confirm -> if (nextDayName != null) {
+                            Choice(stringResource(R.string.finish_and_start, nextDayName)) { finishing(FinishMode.KeepSkipped, false) }
+                        } else {
+                            Choice(stringResource(R.string.finish_workout)) { finishing(FinishMode.KeepSkipped, false) }
                         }
                     }
                     if (onContinue != null && question.isFirst) {

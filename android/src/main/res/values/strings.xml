@@ -118,6 +118,8 @@
     <string name="finish_question">Finish workout?</string>
     <string name="keep_new_sets_question">Keep the new sets?</string>
     <string name="nothing_done">Nothing was done in this workout. Keep it as skipped, or discard it? Your plan stays the same either way.</string>
+    <string name="nothing_added">There\'s nothing in this workout yet, so finishing discards it.</string>
+    <string name="every_set_done">Every set is done. Finish now, or cancel to add more exercises.</string>
     <plurals name="sets_not_done">
         <item quantity="one">1 set isn\'t done. Skipping it keeps %2$s as it is. Removing it also takes it out of the plan.</item>
         <item quantity="other">%1$d sets aren\'t done. Skipping them keeps %2$s as it is. Removing them also takes them out of the plan.</item>

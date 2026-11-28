@@ -105,6 +105,27 @@ class ScreensTest {
     }
 
     @Test
+    fun finishingAnEmptyWorkout() {
+        show(Samples.emptyWorkoutDone)
+        compose.onNodeWithText("Finish").performClick()
+        compose.waitForIdle()
+        capture("finish-empty")
+        compose.onNodeWithText("Every set is done. Finish now, or cancel to add more exercises.").assertExists()
+        compose.onNodeWithText("Finish workout").performClick()
+        assertEquals(listOf("finish KeepSkipped false"), actions.calls)
+    }
+
+    @Test
+    fun finishingAnEmptyWorkoutWithNothingInIt() {
+        show(Samples.emptyWorkout)
+        compose.onNodeWithText("Finish").performClick()
+        compose.waitForIdle()
+        compose.onNodeWithText("There's nothing in this workout yet, so finishing discards it.").assertExists()
+        compose.onNodeWithText("Discard workout").performClick()
+        assertEquals(listOf("finish Discard false"), actions.calls)
+    }
+
+    @Test
     fun todayDark() {
         show(Samples.today, AppTheme.Dark)
         capture("today-dark")
