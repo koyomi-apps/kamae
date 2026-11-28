@@ -151,6 +151,13 @@ object Samples {
         isWorkoutPresented = true,
     )
 
+    /** The empty workout with an exercise added and its set done. */
+    val emptyWorkoutDone = emptyWorkout.copy(
+        workout = emptyWorkout.workout!!.copy(
+            exercises = listOf(WorkoutExercise(exercises[0], listOf(WorkoutSet(10, 60.0, "Standard", 0, workoutId = 8, exerciseId = exercises[0].id, rir = 0, id = 200)))),
+        ),
+    )
+
     /** Backups going to a folder picked on the phone, the last one an hour ago. */
     val backedUp = today.copy(
         backup = BackupState(BackupPlace("content://com.android.externalstorage.documents/tree/primary%3AKamae", NOW / 1000 - 3600), "Kamae"),

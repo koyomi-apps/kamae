@@ -2,6 +2,10 @@
 
 What's new in each build of Kamae for iPhone, called Kitae until November 2026. Builds go to [TestFlight](https://testflight.apple.com/join/GTKbw4Hg), and from 1.0 (2) each one is also on [GitHub's Releases page](https://github.com/koyomi-apps/kamae/releases) as an IPA for sideloading.
 
+## 1.0 (6) · 2026-11-28
+
+- **Empty workouts ask before they finish.** An empty workout has no day to say when it's over, so Finish now asks first, even when every set is done, and a stray tap no longer ends it. One with nothing in it yet says it'll be discarded.
+
 ## 1.0 (5) · 2026-11-21
 
 - **Kitae is now Kamae.** Another workout log on the App Store already went by Kitae, so the app has a name of its own: 構え, a stance, the ready position before you move. It updates over Kitae as before and keeps your plans, workouts, settings and backups.

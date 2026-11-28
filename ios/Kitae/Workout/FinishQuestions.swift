@@ -9,11 +9,13 @@ import SwiftUI
 enum FinishQuestion: Hashable {
     /// Nothing was done: keep the workout as skipped, or discard it.
     case nothingDone
+    /// An empty workout has no sets yet, so finishing discards it.
+    case nothingAdded
     /// Some sets weren't done: keep them as skipped, or remove them from the plan too.
     case unfinished(Int)
     /// Sets were added and done: add them to the day, or keep them in this workout only.
     case addedSets(Int, mode: FinishMode, isFirst: Bool)
-    /// Everything planned was done, but another day is being started.
+    /// Everything was done, but another day is being started, or the workout has no day.
     case confirm
 
     /// The first question for this workout. nil when there's nothing to ask.
@@ -24,7 +26,11 @@ enum FinishQuestion: Hashable {
         if workout.addedDoneCount > 0 {
             return .addedSets(workout.addedDoneCount, mode: .keepSkipped, isFirst: true)
         }
-        return startingAnotherDay ? .confirm : nil
+        if startingAnotherDay { return .confirm }
+        // A day's workout is over when its sets are done, but an empty workout can always take
+        // another exercise, so Finish makes sure first.
+        guard workout.dayID == nil else { return nil }
+        return workout.setCount == 0 ? .nothingAdded : .confirm
     }
 
     /// Whether this is the first question asked, rather than a follow-up.
@@ -92,6 +98,8 @@ private struct FinishQuestions: ViewModifier {
         switch question {
         case .nothingDone:
             parts.append("Nothing was done in this workout. Keep it as skipped, or discard it? Your plan stays the same either way.")
+        case .nothingAdded:
+            parts.append("There's nothing in this workout yet, so finishing discards it.")
         case .unfinished(1) where !hasDay:
             parts.append("1 set isn't done. Keep it as skipped, or remove it from this workout?")
         case .unfinished(let count) where !hasDay:
@@ -104,6 +112,8 @@ private struct FinishQuestions: ViewModifier {
             parts.append("You added 1 set. Add it to \(dayName) for next time?")
         case .addedSets(let count, _, _):
             parts.append("You added \(count) sets. Add them to \(dayName) for next time?")
+        case .confirm where nextDayName == nil:
+            parts.append("Every set is done. Finish now, or cancel to add more exercises.")
         case .confirm:
             break
         }
@@ -116,6 +126,8 @@ private struct FinishQuestions: ViewModifier {
         case .nothingDone:
             Button("Keep as skipped") { onFinish(.keepSkipped, false) }
             Button("Discard workout", role: .destructive) { onFinish(.discard, false) }
+        case .nothingAdded:
+            Button("Discard workout", role: .destructive) { onFinish(.discard, false) }
         case .unfinished where !hasDay:
             Button("Keep as skipped") { askAboutAddedSets(after: .keepSkipped) }
             Button("Remove from workout", role: .destructive) { askAboutAddedSets(after: .discard) }
@@ -126,7 +138,11 @@ private struct FinishQuestions: ViewModifier {
             Button("Add to \(dayName)") { onFinish(mode, true) }
             Button("Only this workout") { onFinish(mode, false) }
         case .confirm:
-            Button("Finish and start \(nextDayName ?? "")") { onFinish(.keepSkipped, false) }
+            if let nextDayName {
+                Button("Finish and start \(nextDayName)") { onFinish(.keepSkipped, false) }
+            } else {
+                Button("Finish workout") { onFinish(.keepSkipped, false) }
+            }
         }
         if let onContinue, question.isFirst {
             Button("Continue \(dayName)", action: onContinue)

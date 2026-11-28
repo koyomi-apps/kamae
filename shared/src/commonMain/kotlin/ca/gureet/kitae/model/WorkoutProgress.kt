@@ -8,9 +8,10 @@ import ca.gureet.kitae.database.WorkoutSet
 
 /**
  * A workout's sets as its screen counts them, and the rest that ticking one off starts, as the
- * iPhone's `Workout` has them. [hasDay] is false when the workout's day has been deleted.
+ * iPhone's `Workout` has them. [hasDay] is false for an empty workout, or when the workout's day
+ * has been deleted.
  */
-class WorkoutProgress(val exercises: List<WorkoutExercise>, private val hasDay: Boolean = true) {
+class WorkoutProgress(val exercises: List<WorkoutExercise>, val hasDay: Boolean = true) {
     val setCount: Int
         get() = exercises.sumOf { it.sets.size }
 
